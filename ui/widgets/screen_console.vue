@@ -194,6 +194,27 @@ class Term {
       }
     });
 
+    this.term.attachCustomKeyEventHandler(async (ev) => {
+      if (this.closed) {
+        return true;
+      }
+
+      if (
+        ev.type == "keyup" &&
+        ((ev.key.toLowerCase() === "c" && ev.shiftKey && ev.ctrlKey) ||
+          (ev.key === "Insert" && ev.ctrlKey))
+      ) {
+        try {
+          window.navigator.clipboard.writeText(this.term.getSelection());
+        } catch (e) {
+          alert("Unable to copy: " + e);
+        }
+        return false;
+      }
+
+      return true;
+    });
+
     let resizeDelay = null,
       oldRows = 0,
       oldCols = 0;
@@ -227,7 +248,7 @@ class Term {
     });
   }
 
-  init(root) {
+  init(root, callbacks) {
     if (this.closed) {
       return;
     }
@@ -247,6 +268,10 @@ class Term {
     // }) {
     //   this.term.loadAddon(new WebglAddon());
     // }
+
+    this.term.textarea.addEventListener("focus", callbacks.focus);
+    this.term.textarea.addEventListener("blur", callbacks.blur);
+
     this.refit();
   }
 
@@ -486,7 +511,7 @@ export default {
           return;
         }
         root.innerHTML = "";
-        self.term.init(root);
+        self.term.init(root, callbacks);
         return;
       } catch (e) {
         // Ignore
@@ -497,7 +522,7 @@ export default {
       root.innerHTML = "";
       callbacks.warn(termTypeFaceLoadError, false);
       self.term.setFont(termFallbackTypeFace);
-      self.term.init(root);
+      self.term.init(root, callbacks);
       self.retryLoadRemoteFont(termTypeFaces, termTypeFaceLoadTimeout, () => {
         if (self.term.destroyed()) {
           return;
@@ -511,10 +536,22 @@ export default {
     },
     async init() {
       let self = this;
+      self.eventHandlers = {
+        keyup: (e) => self.localKeypress(e),
+        keydown: (e) => self.localKeypress(e),
+      };
 
       await self.openTerm(
         self.$el.getElementsByClassName("console-console")[0],
         {
+          focus(e) {
+            document.addEventListener("keyup", self.eventHandlers.keyup);
+            document.addEventListener("keydown", self.eventHandlers.keydown);
+          },
+          blur(e) {
+            document.removeEventListener("keyup", self.eventHandlers.keyup);
+            document.removeEventListener("keydown", self.eventHandlers.keydown);
+          },
           warn(msg, toDismiss) {
             self.$emit("warning", {
               text: msg,
@@ -544,6 +581,14 @@ export default {
     },
     fit() {
       this.term.refit();
+    },
+    localKeypress(e) {
+      //if (!e.altKey && !e.shiftKey && !e.ctrlKey) {
+      //  return;
+      //}
+      if (e.shiftKey && e.ctrlKey && e.key.toLowerCase() === "c") {
+         e.preventDefault();
+      }
     },
     activate() {
       this.term.focus();
